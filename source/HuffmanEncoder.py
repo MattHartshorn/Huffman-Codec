@@ -2,6 +2,8 @@
 
 import sys;
 import queue;
+import pickle;
+import io;
 from operator import itemgetter;
 from EncodedData import EncodedData;
 
@@ -33,15 +35,28 @@ class SubTree:
 class HuffmanEncoder:
     @staticmethod
     def encode(data):
-        return;
+        char_freq = HuffmanEncoder._getCharFrequencies(data);
+        tree = HuffmanEncoder._createTree(char_freq);
+        binary_map = HuffmanEncoder._getBinaryMap(tree);
+        
+        data_bytes = HuffmanEncoder._encodeDataToBytes(data, binary_map);
+        
+        encodedData = EncodedData(char_freq, data_bytes);
+    
+        bytes = pickle.dumps(encodedData, protocol=pickle.HIGHEST_PROTOCOL);
+    
+        return bytes;
         
     @staticmethod
     def decode(bytes):
+        
+        encodedData = pickle.load(io.BytesIO(bytes));
+        print(encodedData.char_frequencies);
         return;
         
 # Private Methods
     @staticmethod
-    def _getCharSetFrequency(data):
+    def _getCharFrequencies(data):
         
         # Map all the frequencies to their characters
         dict = {};
@@ -57,19 +72,15 @@ class HuffmanEncoder:
             res.append((frequency, char));
         
         #return res;
-        return HuffmanEncoder._sortCharSetFrequencies(res);
-    
-    @staticmethod
-    def _sortCharSetFrequencies(list):
-        return sorted(list, key=itemgetter(0));
+        return sorted(res, key=itemgetter(0));
         
         
     @staticmethod
-    def _createTree(chars_frequencies):
+    def _createTree(char_frequencies):
         heap = queue.PriorityQueue();
         
         # Place all the frequencies and characters into the heap
-        for value in chars_frequencies:
+        for value in char_frequencies:
             heap.put(value);
            
         while (heap.qsize() > 1):
@@ -136,18 +147,28 @@ class HuffmanEncoder:
         for char in data:
             bit_str += binary_map[char];
             
-        return bit_str;
+        return HuffmanEncoder._bitStringToBytes(bit_str);
         
         
     @staticmethod
     def _bitStringToBytes(bits):
-        return int(bits, 2).to_bytes(len(bits) // 8, byteorder=sys.byteorder);
+        byte_length = 8;
+    
+    
+        int_array = [int(bits[i:(i + byte_length)], 2) for i in range(0, len(bits), byte_length)];
+        print(len(int_array));
+        return bytearray(int_array);
  
  
-#data = "The quick brown fox jumps over the lazy dog";
+data = "The quick brown fox jumps over the lazy dog";
 #res = HuffmanEncoder._getBinaryMap(HuffmanEncoder._createTree(HuffmanEncoder._getCharSetFrequency(data)));
 #print(len(res));
 #print(BitArray(bin=HuffmanEncoder._encodeDataToBytes(data, res)));
 
-#print(int(HuffmanEncoder._encodeDataToBytes(data, res), 2));
+#x = HuffmanEncoder._bitStringToBytes(HuffmanEncoder._encodeDataToBytes(data, res));
 
+x = HuffmanEncoder.encode(data);
+print(len(x));
+#print(x);
+
+#HuffmanEncoder.decode(x);

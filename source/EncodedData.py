@@ -1,7 +1,7 @@
 
 
-class EncodedData:
+class EncodedData(object):
     
-    def __init__(self, chars_freqencies, byte_data):
-        self.chars_freqencies = chars_freqencies;
-        self.byte_data = byte_data;
+    def __init__(self, char_frequencies, data_bytes):
+        self.char_frequencies = char_frequencies;
+        self.data_bytes = data_bytes;
