@@ -1,0 +1,25 @@
+|----------------|-------------------|-------------------|---------------|------------------|----------------|
+|        A       |        B          |         C         |       D       |         E        |        F       |
+|----------------|-------------------|-------------------|---------------|------------------|----------------|
+|Char Byte Count | Character Buffer  | Frequency Count   | Byte Length   | Frequency Buffer | Encoded Data   |
+|----------------|-------------------|-------------------|---------------|------------------|----------------|
+|    4 bytes     |     <A> bytes     |      4 bytes      |     1 byte    |  <C> * <D> bytes |    x bytes     |
+|----------------|-------------------|-------------------|---------------|------------------|----------------|
+
+
+A:  Char Byte Count
+B:  Character Buffer
+C:  Frequency Count
+D:  Byte Length
+E:  Frequency Buffer
+F:  Encoded Data 
+
+    
+    
+- The character buffer and frequency buffer are sorted by frequency value
+    
+
+- getMaxByteLength(frequencies)
+    - Assumes the list is sorted
+    - return (frequencies[0].bit_length() + 7) // 8
+    
