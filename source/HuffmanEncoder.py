@@ -1,98 +1,81 @@
 import queue;
-from struct import unpack;
-from struct import unpack_from;
-from operator import itemgetter;
+import struct;
 
-class SubTree:
-    def __init__(self, left = None, right = None, root = None):
-        self._left = left;
-        self._right = right;
-        self._root = root;
-    
-    def getParent(self):
-        return self._root;
-    
-    def getChildren(self):
-        return self._left, self._right;
-        
-    def getLeftChild(self):
-        return self._left;
-        
-    def getRightChild(self):
-        return self._right;
-        
-    def __lt__(self, other):
-        return False;
-    
-    def __gt__(self, other):
-        return True;
-        
+from HuffmanNode import HuffmanNode;
+from FrequencyCharPair import FrequencyCharPair;
+
 
 class HuffmanEncoder:
+# Private Fields
     _BITORDER = 'little';
+    _TERMINATOR = FrequencyCharPair(0, None);
 
+    
 # Public Methods
 
     @staticmethod
     def encode(data):
     
         # Compute the character/frequency listing
-        char_freq = HuffmanEncoder._getCharFrequencies(data);
+        fc_pairs = HuffmanEncoder._getFrequencyCharPairs(data);
         
         # Compute the tree and the associated binary map to help form the encoded data
-        tree = HuffmanEncoder._createTree(char_freq);
+        tree = HuffmanEncoder._createTree(fc_pairs);
         binary_map = HuffmanEncoder._getBinaryMap(tree);
         
         # Encode the input data
         data_buffer = HuffmanEncoder._encodeData(data, binary_map);
     
         # Encode the Characters and Frequencies
-        bytes = HuffmanEncoder._encodeCharFrequencies(char_freq);
+        bytes = HuffmanEncoder._encodeFrequencyCharPairs(fc_pairs);
         
         return HuffmanEncoder._combineEncodedData(bytes, data_buffer);
         
     @staticmethod
     def decode(bytes):
-        char_byte_count, freq_count, freq_byte_count = unpack_from(HuffmanEncoder._getUnpackType("IIB"), bytes, 0);
+    
+        # Unpack the header data
+        char_byte_count, freq_count, freq_byte_count = struct.unpack_from(HuffmanEncoder._modifyTypeFormat("IIB"), bytes, 0);
         offset = 9;
-        
-        # Get the character array
-        char_buffer = bytes[offset:offset + char_byte_count];
-        offset += char_byte_count;
         
         # Get and decode the frequencies
         freq_buffer = bytes[offset:offset + freq_count];
         offset += freq_count;
         frequencies = HuffmanEncoder._decodeFrequencies(freq_buffer, freq_byte_count);
-        
-        # Decode the character frequency mapping
-        char_frequencies = HuffmanEncoder._decodeCharFrequencies(char_buffer, frequencies);
+
+        # Get and decode the character array
+        char_buffer = bytes[offset:offset + char_byte_count];
+        offset += char_byte_count;
+        fc_pairs = HuffmanEncoder._decodeFrequencyCharPairs(char_buffer, frequencies);
        
-        tree = HuffmanEncoder._createTree(char_frequencies);
+        # Create the huffman tree
+        tree = HuffmanEncoder._createTree(fc_pairs);
+        
+        # Use the remaining bytes to retrieve the data
         return HuffmanEncoder._decodeDataBytes(tree, bytes[offset:]);
         
         
         
 # Private Methods
     @staticmethod
-    def _createTree(char_frequencies):
+    def _createTree(frequency_char_pairs):
         heap = queue.PriorityQueue();
         
         # Place all the frequencies and characters into the heap
-        for value in char_frequencies:
-            heap.put(value);
+        for pair in frequency_char_pairs:
+            heap.put(pair);
            
         while (heap.qsize() > 1):
             # Get the left and right items
             left = heap.get();
             right = heap.get();
             
-            # Compute the sum of the frequencies and create the Sub-Tree to store in the queue
-            sum_freq = left[0] + right[0];
-            sub_tree = SubTree(left, right);
+            # Compute the sum of the frequencies and create a node of the combined data
+            sum_freq = left.frequency + right.frequency;
+            tree_node = HuffmanNode(sum_freq, left, right);
 
             # Insert the new sub-tree into the heap
-            heap.put((sum_freq, sub_tree));
+            heap.put(tree_node);
             
         # Return the root element which forms the tree
         return heap.get();
@@ -100,7 +83,7 @@ class HuffmanEncoder:
         
     # Decoding 
     @staticmethod
-    def _decodeCharFrequencies(char_buffer, frequencies):  
+    def _decodeFrequencyCharPairs(char_buffer, frequencies):  
         chars = char_buffer.decode();
     
         # Determine if the lengths match
@@ -110,9 +93,9 @@ class HuffmanEncoder:
         # Combine the arrays into a tuple array
         res = [];
         for i in range(0, len(chars)):
-            res.append((frequencies[i], chars[i]));
+            res.append(FrequencyCharPair(frequencies[i], chars[i]));
         
-        return HuffmanEncoder._formatCharFrequencies(res, False);
+        return HuffmanEncoder._formatFrequencyCharPairs(res, False);
     
     @staticmethod                   
     def _decodeFrequencies(freq_buffer, freq_byte_count):
@@ -135,10 +118,10 @@ class HuffmanEncoder:
         return res;
     
     @staticmethod
-    def _decodeDataBytes(tree, data_bytes):
+    def _decodeDataBytes(tree_root, data_bytes):
     
         # Check for empty tree
-        if (tree == None and data_bytes != None):
+        if (tree_root == None and data_bytes != None):
             raise ValueError("tree is empty");
         
         # Check if the data bytes value is valid
@@ -150,27 +133,27 @@ class HuffmanEncoder:
     
         # Initialize the result value and the sub_tree container to the root node
         res = "";
-        sub_tree = tree[1];
+        node = tree_root;
         
         for byte in data_bytes:
             bit = 0;
         
             while (True):
-                if (isinstance(sub_tree, SubTree)):
+                if (isinstance(node, HuffmanNode)):
                     # Non-leaf, traverse left or right and increment bit 
                     bit_val = HuffmanEncoder._getBit(byte, bit);
                     bit += 1;
                     
                     if (bit_val):
-                        sub_tree = sub_tree.getRightChild()[1];
+                        node = node.rightChild;
                     else:
-                        sub_tree = sub_tree.getLeftChild()[1];
-                elif (sub_tree == None):
+                        node = node.leftChild;
+                elif (node.character == None):
                     return res;
                 else:
                     # Add the leaf character value, and reset the tree to the head
-                    res += sub_tree;
-                    sub_tree = tree[1];
+                    res += node.character;
+                    node = tree_root;
             
             
                 # Fetch next byte
@@ -182,7 +165,7 @@ class HuffmanEncoder:
         
     # Encoding
     @staticmethod
-    def _getCharFrequencies(data):
+    def _getFrequencyCharPairs(data):
         
         # Map all the frequencies to their characters
         dict = {};
@@ -195,18 +178,14 @@ class HuffmanEncoder:
         # Create a list of the key, value pairs from the dictionary
         res = [];
         for char, frequency in dict.items():
-            res.append((frequency, char));
+            res.append(FrequencyCharPair(frequency, char));
         
         #return res;
-        return HuffmanEncoder._formatCharFrequencies(res, True);
+        return HuffmanEncoder._formatFrequencyCharPairs(res, True);
     
     @staticmethod
     def _getBinaryMap(tree_root):
         bin_map = {};
-        
-        # Empty tree
-        if (tree_root == None):
-            return bin_map;
         
         # Create the stack to house the nodes
         stack = [];
@@ -215,16 +194,15 @@ class HuffmanEncoder:
         while (stack):
             
             # Get the top item and discard the frequency summation
-            sub_tree, bit_str = stack.pop();
-            _, node = sub_tree;
+            node, bit_str = stack.pop();
             
-            if (isinstance(node, SubTree)):
+            if (isinstance(node, HuffmanNode)):
                 # Add the child nodes to the stack
-                stack.append((node.getRightChild(), bit_str + "1"));
-                stack.append((node.getLeftChild(), bit_str + "0"));
+                stack.append((node.rightChild, bit_str + "1"));
+                stack.append((node.leftChild, bit_str + "0"));
             else:
                 # Leaf Node, map the binary string to the character
-                bin_map[node] = bit_str;
+                bin_map[node.character] = bit_str;
             
         return bin_map;
     
@@ -268,29 +246,24 @@ class HuffmanEncoder:
         return res;
     
     @staticmethod    
-    def _encodeCharFrequencies(char_frequencies):
+    def _encodeFrequencyCharPairs(pairs):
         # Declare the frequency information
-        freq_count = len(char_frequencies) - 1;
-        freq_byte_count = (char_frequencies[freq_count][0].bit_length() + 7) // 8;
+        freq_count = len(pairs) - 1;
+        freq_byte_count = (pairs[freq_count].frequency.bit_length() + 7) // 8; # Max Frequency
         freq_buffer = bytearray();
         
         # Concatinate all the characters into a string and encode the frequencies
         char_str = "";
-        f = "";
-        for value in char_frequencies:
-            if (value[1] != None):
-                char_str += value[1];
-                freq_buffer.extend(value[0].to_bytes(freq_byte_count, HuffmanEncoder._BITORDER));
-                f += str(value[0]) + ",";
+        for fc_pair in pairs:
+            if (fc_pair.character != None):
+                char_str += fc_pair.character;
+                freq_buffer.extend(fc_pair.frequency.to_bytes(freq_byte_count, HuffmanEncoder._BITORDER));
         
         # Encode the remaining character and frequency data
         char_buffer = char_str.encode();
-        char_byte_count = len(char_buffer).to_bytes(4, HuffmanEncoder._BITORDER);
-        freq_byte_count = freq_byte_count.to_bytes(1, HuffmanEncoder._BITORDER);
-        freq_count = freq_count.to_bytes(4, HuffmanEncoder._BITORDER);
+        header_bytes = struct.pack(HuffmanEncoder._modifyTypeFormat("IIB"), len(char_buffer), freq_count, freq_byte_count);
         
-        
-        return HuffmanEncoder._combineEncodedData(char_byte_count, freq_count, freq_byte_count, char_buffer, freq_buffer);
+        return HuffmanEncoder._combineEncodedData(header_bytes, freq_buffer, char_buffer);
       
     @staticmethod
     def _combineEncodedData(*byte_args):
@@ -318,19 +291,16 @@ class HuffmanEncoder:
         return (byte & (1 << (7 - bit)) != 0);
  
     @staticmethod
-    def _formatCharFrequencies(char_frequencies, sort):
-        
-        terminator = (0, None);
-        
+    def _formatFrequencyCharPairs(pairs, sort):        
         if (sort):
-            char_frequencies.append(terminator);
-            return sorted(char_frequencies, key=itemgetter(0));
+            pairs.append(HuffmanEncoder._TERMINATOR);
+            return sorted(pairs);
         else:
-            char_frequencies.insert(0, terminator);
-            return char_frequencies;
+            pairs.insert(0, HuffmanEncoder._TERMINATOR);
+            return pairs;
       
     @staticmethod
-    def _getUnpackType(type_str):
+    def _modifyTypeFormat(type_str):
         
         symbol = ">" if (HuffmanEncoder._BITORDER == 'big') else "<";
         
@@ -353,8 +323,7 @@ class HuffmanEncoder:
         elif (len(bytes) > 4):
             raise ValueError("Cannot convert bytes to int, must be at most 4 bytes.");
            
-        return unpack(HuffmanEncoder._getUnpackType("I"), bytes)[0];
- 
+        return struct.unpack(HuffmanEncoder._modifyTypeFormat("I"), bytes)[0];
  
  
  
