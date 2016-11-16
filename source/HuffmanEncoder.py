@@ -1,9 +1,6 @@
-# https://www.siggraph.org/education/materials/HyperGraph/video/mpeg/mpegfaq/huffman_tutorial.html
-
-import sys;
 import queue;
-import io;
 from struct import unpack;
+from struct import unpack_from;
 from operator import itemgetter;
 
 class SubTree:
@@ -32,7 +29,7 @@ class SubTree:
         
 
 class HuffmanEncoder:
-    _BITORDER = 'big';
+    _BITORDER = 'little';
 
 # Public Methods
 
@@ -47,22 +44,32 @@ class HuffmanEncoder:
         binary_map = HuffmanEncoder._getBinaryMap(tree);
         
         # Encode the input data
-        data_bytes = HuffmanEncoder._encodeDataToBytes(data, binary_map);
+        data_buffer = HuffmanEncoder._encodeData(data, binary_map);
     
         # Encode the Characters and Frequencies
         bytes = HuffmanEncoder._encodeCharFrequencies(char_freq);
         
-        # Append the main data to then of the character/frequency bytes
-        bytes.extend(data_bytes);
-        
-        return bytes;
+        return HuffmanEncoder._combineEncodedData(bytes, data_buffer);
         
     @staticmethod
     def decode(bytes):
+        char_byte_count, freq_count, freq_byte_count = unpack_from(HuffmanEncoder._getUnpackType("IIB"), bytes, 0);
+        offset = 9;
         
+        # Get the character array
+        char_buffer = bytes[offset:offset + char_byte_count];
+        offset += char_byte_count;
         
+        # Get and decode the frequencies
+        freq_buffer = bytes[offset:offset + freq_count];
+        offset += freq_count;
+        frequencies = HuffmanEncoder._decodeFrequencies(freq_buffer, freq_byte_count);
         
-        return;
+        # Decode the character frequency mapping
+        char_frequencies = HuffmanEncoder._decodeCharFrequencies(char_buffer, frequencies);
+       
+        tree = HuffmanEncoder._createTree(char_frequencies);
+        return HuffmanEncoder._decodeDataBytes(tree, bytes[offset:]);
         
         
         
@@ -93,10 +100,6 @@ class HuffmanEncoder:
         
     # Decoding 
     @staticmethod
-    def _partitionBytes(bytes):
-        return;
-    
-    @staticmethod
     def _decodeCharFrequencies(char_buffer, frequencies):  
         chars = char_buffer.decode();
     
@@ -121,25 +124,13 @@ class HuffmanEncoder:
             
         res = [];
         
-        # Determine the decoding endianness
-        type = ">I" if (HuffmanEncoder._BITORDER == 'big') else "<I";
-        
         # Loop over all the frequencies
         for i in range(0, len(freq_buffer), freq_byte_count):
-            curr_freq = None;
-            
-            # Fill the byte array with any missing bytes
-            if (4 - freq_byte_count > 0):
-                curr_freq = bytearray([0] * (4 - freq_byte_count));
         
-            # Retrieve the set of bytes
-            if (curr_freq == None):
-                curr_freq = freq_buffer[i:i + freq_byte_count];
-            else:
-                curr_freq.extend(freq_buffer[i:i + freq_byte_count]);
-            
+            bytes = freq_buffer[i:i + freq_byte_count];
+        
             # Unpack the frequency value
-            res.append(unpack(type, curr_freq)[0]);
+            res.append(HuffmanEncoder._convertBytesToInt(bytes));
             
         return res;
     
@@ -238,7 +229,7 @@ class HuffmanEncoder:
         return bin_map;
     
     @staticmethod
-    def _encodeDataToBytes(data, binary_map):
+    def _encodeData(data, binary_map):
         # Single character or no data
         if (len(binary_map) == 0):
             return None;
@@ -257,7 +248,6 @@ class HuffmanEncoder:
             else:
                 bit_str = binary_map[data[i]];
         
-            
             # Set the 1 bits for the current bit string 
             for bit in bit_str:
                 if (bit == "1"):
@@ -266,7 +256,7 @@ class HuffmanEncoder:
                 
                 # Completed byte, add to the array
                 if (bit_count == 8):
-                    res.append(byte);
+                    res.extend(byte.to_bytes(1, HuffmanEncoder._BITORDER));
                     byte = 0;
                     bit_count = 0;
         
@@ -280,8 +270,8 @@ class HuffmanEncoder:
     @staticmethod    
     def _encodeCharFrequencies(char_frequencies):
         # Declare the frequency information
-        freq_count = len(char_frequencies);
-        freq_byte_count = (char_frequencies[freq_count - 1][0].bit_length() + 7) // 8;
+        freq_count = len(char_frequencies) - 1;
+        freq_byte_count = (char_frequencies[freq_count][0].bit_length() + 7) // 8;
         freq_buffer = bytearray();
         
         # Concatinate all the characters into a string and encode the frequencies
@@ -293,7 +283,6 @@ class HuffmanEncoder:
                 freq_buffer.extend(value[0].to_bytes(freq_byte_count, HuffmanEncoder._BITORDER));
                 f += str(value[0]) + ",";
         
-        
         # Encode the remaining character and frequency data
         char_buffer = char_str.encode();
         char_byte_count = len(char_buffer).to_bytes(4, HuffmanEncoder._BITORDER);
@@ -301,16 +290,17 @@ class HuffmanEncoder:
         freq_count = freq_count.to_bytes(4, HuffmanEncoder._BITORDER);
         
         
-        # Add all the binary arrays to the resulting array
+        return HuffmanEncoder._combineEncodedData(char_byte_count, freq_count, freq_byte_count, char_buffer, freq_buffer);
+      
+    @staticmethod
+    def _combineEncodedData(*byte_args):
         res = bytearray();
-        res.extend(char_byte_count);
-        res.extend(char_buffer);
-        res.extend(freq_count);
-        res.extend(freq_byte_count);
-        res.extend(freq_buffer);
         
+        for bytes in byte_args:
+            res.extend(bytes);
+            
         return res;
-        
+    
     
     # Helper Methods
     @staticmethod
@@ -338,17 +328,52 @@ class HuffmanEncoder:
         else:
             char_frequencies.insert(0, terminator);
             return char_frequencies;
+      
+    @staticmethod
+    def _getUnpackType(type_str):
         
+        symbol = ">" if (HuffmanEncoder._BITORDER == 'big') else "<";
+        
+        return symbol + type_str;
+      
+    @staticmethod
+    def _convertBytesToInt(bytes):
+        
+        # Ensure the length is 4 bytes
+        if (len(bytes) < 4):
+            tmp = bytes;
+            bytes = bytearray([0] * (4 - len(bytes)));
+            
+            if (HuffmanEncoder._BITORDER == 'big'):
+                bytes.extend(tmp);
+            else:
+                tmp.extend(bytes);
+                bytes = tmp;
+            
+        elif (len(bytes) > 4):
+            raise ValueError("Cannot convert bytes to int, must be at most 4 bytes.");
+           
+        return unpack(HuffmanEncoder._getUnpackType("I"), bytes)[0];
+ 
+ 
+ 
+ 
  
 # input is 359 bytes
 data = "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog.";
 
+print("Input Length :", len(data));
+print();
 
 x = HuffmanEncoder.encode(data);
+print("Encoded Length :", len(x));
+print("Compression Percentage :", (1 - (len(x)/len(data))));
 
-print(len(x)); # output byte count
-print(x); # binary representation
-
+y = HuffmanEncoder.decode(x);
+print();
+print("Decoded Length :", len(y));
+print("Matching Data :", y == data);
+print("Decoded Data:\n"+y);
 
 
 
