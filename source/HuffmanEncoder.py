@@ -14,7 +14,12 @@ class HuffmanEncoder:
 # Public Methods
 
     @staticmethod
-    def encode(data):
+    def encode(data, ofile_name = None):
+    
+        # Declare and open the output file if provided
+        ofile = None;
+        if (ofile_name is not None):
+            ofile = open(ofile_name, "wb+");
     
         # Compute the character/frequency listing
         fc_pairs = HuffmanEncoder._getFrequencyCharPairs(data);
@@ -23,37 +28,73 @@ class HuffmanEncoder:
         tree = HuffmanEncoder._createTree(fc_pairs);
         binary_map = HuffmanEncoder._getBinaryMap(tree);
         
-        # Encode the input data
+        # Encode all the data
+        header_buffer = HuffmanEncoder._encodeFrequencyCharPairs(fc_pairs);
         data_buffer = HuffmanEncoder._encodeData(data, binary_map);
-    
-        # Encode the Characters and Frequencies
-        bytes = HuffmanEncoder._encodeFrequencyCharPairs(fc_pairs);
         
-        return HuffmanEncoder._combineEncodedData(bytes, data_buffer);
+        if (ofile is not None):
+            # Write the data to the output file
+            ofile.write(header_buffer);
+            ofile.write(data_buffer);
+            ofile.close(); 
+        else:  
+            # Combine and return the byte data
+            return HuffmanEncoder._combineEncodedData(header_buffer, data_buffer);
         
     @staticmethod
-    def decode(bytes):
+    def decode(bytes, ofile_name = None):
+    
+        # Declare and open the output file if provided
+        ofile = None;
+        if (ofile_name is not None):
+            ofile = open(ofile_name, "w+");
     
         # Unpack the header data
         char_byte_count, freq_count, freq_byte_count = struct.unpack_from(HuffmanEncoder._modifyTypeFormat("IIB"), bytes, 0);
         offset = 9;
         
         # Get and decode the frequencies
-        freq_buffer = bytes[offset:offset + freq_count];
-        offset += freq_count;
+        freq_buffer = bytes[offset:offset + (freq_count * freq_byte_count)];
+        offset += (freq_count * freq_byte_count);
         frequencies = HuffmanEncoder._decodeFrequencies(freq_buffer, freq_byte_count);
-
+        
         # Get and decode the character array
         char_buffer = bytes[offset:offset + char_byte_count];
         offset += char_byte_count;
         fc_pairs = HuffmanEncoder._decodeFrequencyCharPairs(char_buffer, frequencies);
        
-        # Create the huffman tree
+        # Create the huffman tree and decode the data
         tree = HuffmanEncoder._createTree(fc_pairs);
+        decoded_data = HuffmanEncoder._decodeDataBytes(tree, bytes[offset:]);
         
-        # Use the remaining bytes to retrieve the data
-        return HuffmanEncoder._decodeDataBytes(tree, bytes[offset:]);
+        # Write or return the data
+        if (ofile is not None):
+            ofile.write(decoded_data);
+            ofile.close();
+        else:
+            return decoded_data;
         
+        
+    @staticmethod
+    def encodeFile(ifile_name, ofile_name = None):
+    
+        ifile = open(ifile_name, "r");
+    
+        bytes = HuffmanEncoder.encode(ifile.read(), ofile_name);
+        ifile.close();
+        
+        return bytes;
+        
+    @staticmethod
+    def decodeFile(ifile_name, ofile_name = None):
+    
+        ifile = open(ifile_name, "rb");
+    
+        data = HuffmanEncoder.decode(ifile.read(), ofile_name);
+        ifile.close();
+        
+        return data;
+    
         
         
 # Private Methods
@@ -121,11 +162,11 @@ class HuffmanEncoder:
     def _decodeDataBytes(tree_root, data_bytes):
     
         # Check for empty tree
-        if (tree_root == None and data_bytes != None):
+        if (tree_root is None and data_bytes is not None):
             raise ValueError("tree is empty");
         
         # Check if the data bytes value is valid
-        if (data_bytes == None):
+        if (data_bytes is None):
             raise ValueError("data_bytes cannot be None");
         elif (len(data_bytes) == 0):
             return "";
@@ -148,7 +189,7 @@ class HuffmanEncoder:
                         node = node.rightChild;
                     else:
                         node = node.leftChild;
-                elif (node.character == None):
+                elif (node.character is None):
                     return res;
                 else:
                     # Add the leaf character value, and reset the tree to the head
@@ -159,10 +200,8 @@ class HuffmanEncoder:
                 # Fetch next byte
                 if (bit == 8):
                     break;
-        
-        return res;
-        
-        
+       
+
     # Encoding
     @staticmethod
     def _getFrequencyCharPairs(data):
@@ -207,7 +246,7 @@ class HuffmanEncoder:
         return bin_map;
     
     @staticmethod
-    def _encodeData(data, binary_map):
+    def _encodeData(data, binary_map, ofile = None):
         # Single character or no data
         if (len(binary_map) == 0):
             return None;
@@ -235,18 +274,21 @@ class HuffmanEncoder:
                 # Completed byte, add to the array
                 if (bit_count == 8):
                     res.extend(byte.to_bytes(1, HuffmanEncoder._BITORDER));
+                        
                     byte = 0;
                     bit_count = 0;
         
         # Non complete byte, add to the array
         if (bit_count != 0):
-            res.append(byte);
+            res.extend(byte.to_bytes(1, HuffmanEncoder._BITORDER));
             
-            
-        return res;
+        if (ofile is not None):
+            ofile.write(res);
+        else:
+            return res;
     
     @staticmethod    
-    def _encodeFrequencyCharPairs(pairs):
+    def _encodeFrequencyCharPairs(pairs, ofile = None):
         # Declare the frequency information
         freq_count = len(pairs) - 1;
         freq_byte_count = (pairs[freq_count].frequency.bit_length() + 7) // 8; # Max Frequency
@@ -255,7 +297,7 @@ class HuffmanEncoder:
         # Concatinate all the characters into a string and encode the frequencies
         char_str = "";
         for fc_pair in pairs:
-            if (fc_pair.character != None):
+            if (fc_pair.character is not None):
                 char_str += fc_pair.character;
                 freq_buffer.extend(fc_pair.frequency.to_bytes(freq_byte_count, HuffmanEncoder._BITORDER));
         
@@ -263,7 +305,13 @@ class HuffmanEncoder:
         char_buffer = char_str.encode();
         header_bytes = struct.pack(HuffmanEncoder._modifyTypeFormat("IIB"), len(char_buffer), freq_count, freq_byte_count);
         
-        return HuffmanEncoder._combineEncodedData(header_bytes, freq_buffer, char_buffer);
+        bytes = HuffmanEncoder._combineEncodedData(header_bytes, freq_buffer, char_buffer);
+        
+        # Write to file or return the byte array
+        if (ofile is not None):
+            ofile.write(bytes);
+        else:
+            return bytes;
       
     @staticmethod
     def _combineEncodedData(*byte_args):
@@ -311,7 +359,7 @@ class HuffmanEncoder:
         
         # Ensure the length is 4 bytes
         if (len(bytes) < 4):
-            tmp = bytes;
+            tmp = bytearray(bytes);
             bytes = bytearray([0] * (4 - len(bytes)));
             
             if (HuffmanEncoder._BITORDER == 'big'):
@@ -329,20 +377,20 @@ class HuffmanEncoder:
  
  
 # input is 359 bytes
-data = "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog.";
+#data = "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog.";
 
-print("Input Length :", len(data));
-print();
+#print("Input Length :", len(data));
+#print();
 
-x = HuffmanEncoder.encode(data);
-print("Encoded Length :", len(x));
-print("Compression Percentage :", (1 - (len(x)/len(data))));
+HuffmanEncoder.encodeFile("test.txt", "test2.txt");
+print(HuffmanEncoder.decodeFile("test2.txt"));
+#print("Compression Reduction :", "{0:.2f}%".format((1 - (len(x)/len(data))) * 100));
 
-y = HuffmanEncoder.decode(x);
-print();
-print("Decoded Length :", len(y));
-print("Matching Data :", y == data);
-print("Decoded Data:\n"+y);
+#y = HuffmanEncoder.decode(x);
+#print();
+#print("Decoded Length :", len(y));
+#print("Matching Data :", y == data);
+#print("Decoded Data:\n"+y);
 
 
 
