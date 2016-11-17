@@ -1,8 +1,8 @@
 import queue;
 import struct;
 
-from HuffmanNode import HuffmanNode;
-from FrequencyCharPair import FrequencyCharPair;
+from node import HuffmanNode;
+from fcpair import FrequencyCharPair;
 
 
 class HuffmanEncoder:
@@ -79,9 +79,10 @@ class HuffmanEncoder:
     def encodeFile(ifile_name, ofile_name = None):
     
         ifile = open(ifile_name, "r");
-    
-        bytes = HuffmanEncoder.encode(ifile.read(), ofile_name);
+        data = ifile.read();
         ifile.close();
+    
+        bytes = HuffmanEncoder.encode(data, ofile_name);
         
         return bytes;
         
@@ -89,9 +90,10 @@ class HuffmanEncoder:
     def decodeFile(ifile_name, ofile_name = None):
     
         ifile = open(ifile_name, "rb");
-    
-        data = HuffmanEncoder.decode(ifile.read(), ofile_name);
+        bytes = ifile.read();
         ifile.close();
+    
+        data = HuffmanEncoder.decode(bytes, ofile_name);
         
         return data;
     
@@ -373,42 +375,4 @@ class HuffmanEncoder:
            
         return struct.unpack(HuffmanEncoder._modifyTypeFormat("I"), bytes)[0];
  
- 
- 
- 
-# input is 359 bytes
-#data = "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog.";
-
-#print("Input Length :", len(data));
-#print();
-
-HuffmanEncoder.encodeFile("test.txt", "test2.txt");
-print(HuffmanEncoder.decodeFile("test2.txt"));
-#print("Compression Reduction :", "{0:.2f}%".format((1 - (len(x)/len(data))) * 100));
-
-#y = HuffmanEncoder.decode(x);
-#print();
-#print("Decoded Length :", len(y));
-#print("Matching Data :", y == data);
-#print("Decoded Data:\n"+y);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
