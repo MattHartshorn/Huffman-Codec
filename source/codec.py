@@ -1,17 +1,25 @@
-import sys;
 import argparse;
 import os;
-from fractions import Fraction;
 
-from encoder import HuffmanEncoder;
+from encoder import encodeFile;
+from encoder import decodeFile;
 
 
 
 
 def getFileSize(filename):
+    """
+    Reads the file size of the specifed file and reduces the size to B, KB, or MB.
+    
+    @param filename: name of the file that has its file size read
+    
+    @returns: a tuple of the file size and the units of the file size
+    """
+
     try:
         size = os.path.getsize(filename); 
         
+        # Reduce the size by changing units
         if (size < 1000):
             return size, "B"; # Bytes
         elif (size < 1000000):
@@ -26,9 +34,21 @@ def getFileSize(filename):
   
   
 def printStatistics(ifile_name, ifile_size, ofile_name, ofile_size, show_compression):
+    """
+    Prints out information about the encoding/decoing that occured.
+    
+    @param ifile_name: name of the input file
+    @param ifile_size: size of the input file (size, units)
+    @param ofile_name: name of the output file
+    @param ofile_size: size of the output file (size, units)
+    @param show_compression: whether or not the compression percentage should be evaluated
+    """
+    
+    # Create separator strings
     separator = ("=" * 80);
     section = ("-" * 80);
     
+    # Print out the information about the files
     print(separator);
     print("File Statistics");
     print(separator);
@@ -51,11 +71,18 @@ def printStatistics(ifile_name, ifile_size, ofile_name, ofile_size, show_compres
   
   
 def printErrorExit(msg, error_code = 2):
+    """
+    Prints the supplied error message, then exits the program.
+    """
     print("[ERROR]:", msg);
     exit(error_code);
     
 
 def createArgParser():
+    """
+    Creates the argument parser used to parse the command line arguments.
+    """
+
     parser = argparse.ArgumentParser();
     parser.add_argument("input_file", help="Text file to encode or binary file to decode");
     parser.add_argument("-o", "--ofile", help="File the output is written to, overwrites any existing file");
@@ -90,9 +117,9 @@ def main():
             parser.print_help();
             exit(2);
         elif (args.decode):
-            HuffmanEncoder.decodeFile(args.input_file, ofile);
+            decodeFile(args.input_file, ofile);
         else:
-            HuffmanEncoder.encodeFile(args.input_file, ofile);
+            encodeFile(args.input_file, ofile);
             show_compression = True;
             
             
@@ -100,8 +127,8 @@ def main():
         printErrorExit("The input file '{}' does not exist".format(args.input_file));
     except IOError:
         printErrorExit("Unabled to access the required files");
-    except Exception as err:
-        printErrorExit("Invalid file format for '{}' :: {}".format(args.input_file, err));
+    #except Exception as err:
+    #    printErrorExit("Invalid file format for '{}' :: {}".format(args.input_file, err));
     
     
     # Get the output file size
